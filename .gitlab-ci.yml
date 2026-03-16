@@ -1,0 +1,33 @@
+stages:
+  - build
+
+variables:
+  IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+  TAG_ONLY: $CI_COMMIT_SHORT_SHA
+
+workflow:
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - "*.go"
+        - "funcs/**/*"
+        - "structs/**/*"
+        - "Dockerfile"
+      when: always
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: always
+    - when: never
+
+build-task:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - >
+      docker login $CI_REGISTRY
+      -u $CI_REGISTRY_USER 
+      -p $CI_REGISTRY_PASSWORD
+  script:
+    - docker build -t $IMAGE_TAG .
+    - docker push $IMAGE_TAG
