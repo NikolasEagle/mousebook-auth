@@ -1,9 +1,11 @@
 stages:
   - build
+  - update-helm-chart
 
 variables:
   IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
   TAG_ONLY: $CI_COMMIT_SHORT_SHA
+  CHART_REPO: github.com/NikolasEagle/mousebook-helm.git
 
 workflow:
   rules:
@@ -42,3 +44,20 @@ build-task:
   script:
     - docker build -t $IMAGE_TAG .
     - docker push $IMAGE_TAG
+
+update-helm-chart-task:
+  stage: update-helm-chart
+  image: bitnami/git:latest
+  variables:
+    GIT_STRATEGY: none
+  script:
+    - git clone https://$CHART_REPO helm-charts
+    - cd helm-charts/charts/mousebook
+    - sed -i '/^auth:/,/^[^ ]/ s/\(^[ ]*tag:\).*/\1 "'$TAG_ONLY'"/' values.yaml
+    - awk '/^version:/ {split($2, v, "."); $2 = v[1]+1 "." v[2] "." v[3]} 1' Chart.yaml > Chart.yaml.tmp && mv Chart.yaml.tmp Chart.yaml
+    - awk '/^appVersion:/ {split($2, v, "."); $2 = v[1] "." v[2]+1 "." v[3]} 1' Chart.yaml > Chart.yaml.tmp && mv Chart.yaml.tmp Chart.yaml
+    - git config user.email "ci@gitlab.com"
+    - git config user.name "GitLab CI"
+    - git add .
+    - git commit -m "Изменение версии образа для auth на $TAG_ONLY"
+    - git push https://${HELM_DEPLOY_USER}:${HELM_DEPLOY_TOKEN}@$CHART_REPO main
