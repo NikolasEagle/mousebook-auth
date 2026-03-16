@@ -15,6 +15,17 @@ workflow:
         - "Dockerfile"
       when: always
     - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - ".github/**/*"
+        - "docs/**/*"
+        - ".gitignore"
+        - ".gitlab-ci.yml"
+        - "go.mod"
+        - "go.sum"
+        - "LICENSE"
+        - "README.md"
+      when: never
+    - if: $CI_COMMIT_BRANCH == "main"
       when: always
     - when: never
 
