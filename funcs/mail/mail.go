@@ -167,7 +167,7 @@ func SendMessageToAdmin(firstName, secondName, email, password string) error {
 	return sendSignedMail(smtpRecipient, message)
 }
 
-func SendMessageToUser(email, password string) error {
+func SendMessageToUser(firstName, secondName, email, password string) error {
 	message := gomail.NewMessage()
 
 	message.SetHeader("From", fmt.Sprintf("MouseBook <%s>", smtpUser))
