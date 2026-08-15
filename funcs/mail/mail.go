@@ -2,17 +2,11 @@ package mail
 
 import (
 	"bytes"
-	"crypto/rsa"
 	"crypto/tls"
-	"crypto/x509"
-	"encoding/pem"
 	"fmt"
 	"log/slog"
 	"net/smtp"
 	"os"
-	"strings"
-
-	"github.com/emersion/go-msgauth/dkim"
 	"github.com/joho/godotenv"
 	"gopkg.in/gomail.v2"
 )
@@ -25,71 +19,18 @@ var (
 	smtpUser       = os.Getenv("SMTP_USER")
 	smtpPassword   = os.Getenv("SMTP_PASSWORD")
 	smtpRecipient  = os.Getenv("SMTP_RECIPIENT")
-	domain         = os.Getenv("DOMAIN")
-	dkimSelector   = os.Getenv("DKIM_SELECTOR")
-	dkimPrivateKey = os.Getenv("DKIM_PRIVATE_KEY")
 )
 
 func logErr(msg string, err error) {
 	slog.Error(msg, "error", err)
 }
 
-func signDKIM(data []byte) ([]byte, error) {
-	pemStr := strings.ReplaceAll(dkimPrivateKey, "\\n", "\n")
-
-	block, _ := pem.Decode([]byte(pemStr))
-	if block == nil {
-		err := fmt.Errorf("invalid PEM key")
-		logErr("dkim decode failed", err)
-		return nil, err
-	}
-
-	var rsaKey *rsa.PrivateKey
-
-	keyAny, err := x509.ParsePKCS8PrivateKey(block.Bytes)
-	if err == nil {
-		var ok bool
-		rsaKey, ok = keyAny.(*rsa.PrivateKey)
-		if !ok {
-			err := fmt.Errorf("not RSA private key (PKCS8)")
-			logErr("dkim key type error", err)
-			return nil, err
-		}
-	} else {
-		rsaKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
-		if err != nil {
-			logErr("dkim parse private key failed", err)
-			return nil, fmt.Errorf("parse private key failed: %w", err)
-		}
-	}
-
-	options := &dkim.SignOptions{
-		Domain:   domain,
-		Selector: dkimSelector,
-		Signer:   rsaKey,
-	}
-
-	var out bytes.Buffer
-	if err := dkim.Sign(&out, bytes.NewReader(data), options); err != nil {
-		logErr("dkim signing failed", err)
-		return nil, fmt.Errorf("dkim sign error: %w", err)
-	}
-
-	return out.Bytes(), nil
-}
-
-func sendSignedMail(to string, message *gomail.Message) error {
+func sendMail(to string, message *gomail.Message) error {
 	var buffer bytes.Buffer
 
 	if _, err := message.WriteTo(&buffer); err != nil {
 		logErr("build email failed", err)
 		return fmt.Errorf("build message error: %w", err)
-	}
-
-	signed, err := signDKIM(buffer.Bytes())
-	if err != nil {
-		logErr("dkim step failed", err)
-		return fmt.Errorf("dkim error: %w", err)
 	}
 
 	addr := fmt.Sprintf("%s:%s", smtpHost, smtpPort)
@@ -133,7 +74,7 @@ func sendSignedMail(to string, message *gomail.Message) error {
 		return fmt.Errorf("data error: %w", err)
 	}
 
-	if _, err := w.Write(signed); err != nil {
+	if _, err := w.Write(buffer.Bytes()); err != nil {
 		logErr("smtp write failed", err)
 		_ = w.Close()
 		return fmt.Errorf("write error: %w", err)
@@ -164,7 +105,7 @@ func SendMessageToAdmin(firstName, secondName, email, password string) error {
 		<p>Password: %s</p>
 	`, firstName, secondName, email, password))
 
-	return sendSignedMail(smtpRecipient, message)
+	return sendMail(smtpRecipient, message)
 }
 
 func SendMessageToUser(firstName, secondName, email, password string) error {
@@ -180,5 +121,5 @@ func SendMessageToUser(firstName, secondName, email, password string) error {
 		<p>Password: %s</p>
 	`, email, password))
 
-	return sendSignedMail(email, message)
+	return sendMail(email, message)
 }
